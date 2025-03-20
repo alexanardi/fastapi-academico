@@ -1,10 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Query
 from sqlalchemy import create_engine, Column, Integer, String, Date, DECIMAL, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 import os
 import uvicorn
 
-# Configurar la conexión a PostgreSQL en Railway desde variable de entorno
+# Configurar la conexión a PostgreSQL en Railway
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:mIEqkmRTUmDuTxKhElzSsJclYZZOhRqs@centerbeam.proxy.rlwy.net:20887/academico")
 
 engine = create_engine(DATABASE_URL)
@@ -57,10 +57,25 @@ def get_db():
     finally:
         db.close()
 
-# ✅ Endpoint para obtener todos los estudiantes
+# ✅ Endpoint para obtener todos los estudiantes con filtros opcionales
 @app.get("/estudiantes")
-def obtener_estudiantes(db: Session = Depends(get_db)):
-    return db.query(Estudiante).all()
+def obtener_estudiantes(
+    nombre: str = Query(None, description="Filtrar por nombre"),
+    apellido: str = Query(None, description="Filtrar por apellido"),
+    estado: str = Query(None, description="Filtrar por estado (Activo/Inactivo)"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Estudiante)
+    
+    if nombre:
+        query = query.filter(Estudiante.nombre.ilike(f"%{nombre}%"))
+    if apellido:
+        query = query.filter(Estudiante.apellidos.ilike(f"%{apellido}%"))
+    if estado:
+        query = query.filter(Estudiante.estado == estado)
+
+    estudiantes = query.all()
+    return estudiantes
 
 # ✅ Endpoint para obtener un estudiante en particular por ID
 @app.get("/estudiantes/{id_estudiante}")
@@ -70,20 +85,42 @@ def obtener_estudiante(id_estudiante: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
     return estudiante
 
-# ✅ Endpoint para obtener todas las observaciones de un estudiante
+# ✅ Endpoint para obtener todas las observaciones de un estudiante con filtro por fecha
 @app.get("/estudiantes/{id_estudiante}/observaciones")
-def obtener_observaciones(id_estudiante: int, db: Session = Depends(get_db)):
-    observaciones = db.query(EstudianteObservacion).filter(EstudianteObservacion.id_estudiante == id_estudiante).all()
+def obtener_observaciones(
+    id_estudiante: int,
+    fecha: str = Query(None, description="Filtrar por fecha (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(EstudianteObservacion).filter(EstudianteObservacion.id_estudiante == id_estudiante)
+    
+    if fecha:
+        query = query.filter(EstudianteObservacion.fecha == fecha)
+
+    observaciones = query.all()
+    
     if not observaciones:
         raise HTTPException(status_code=404, detail="No se encontraron observaciones para este estudiante")
+    
     return observaciones
 
-# ✅ Endpoint para obtener todas las calificaciones de un estudiante
+# ✅ Endpoint para obtener todas las calificaciones de un estudiante con filtro por asignatura
 @app.get("/estudiantes/{id_estudiante}/calificaciones")
-def obtener_calificaciones(id_estudiante: int, db: Session = Depends(get_db)):
-    calificaciones = db.query(EstudianteCalificacion).filter(EstudianteCalificacion.id_estudiante == id_estudiante).all()
+def obtener_calificaciones(
+    id_estudiante: int,
+    asignatura: str = Query(None, description="Filtrar por asignatura"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(EstudianteCalificacion).filter(EstudianteCalificacion.id_estudiante == id_estudiante)
+
+    if asignatura:
+        query = query.filter(EstudianteCalificacion.asignatura.ilike(f"%{asignatura}%"))
+
+    calificaciones = query.all()
+
     if not calificaciones:
         raise HTTPException(status_code=404, detail="No se encontraron calificaciones para este estudiante")
+    
     return calificaciones
 
 # Ejecutar la API con Uvicorn en el puerto dinámico de Railway
